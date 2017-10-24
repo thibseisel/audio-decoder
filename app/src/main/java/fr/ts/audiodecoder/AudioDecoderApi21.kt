@@ -1,60 +1,21 @@
 package fr.ts.audiodecoder
 
-import android.content.Context
-import android.media.AudioFormat
-import android.media.AudioTrack
 import android.media.MediaCodec
-import android.media.MediaExtractor
-import android.media.MediaFormat
-import android.net.Uri
+import android.os.Build
+import android.support.annotation.RequiresApi
 import android.util.Log
-
-import java.io.IOException
 import java.nio.ByteOrder
 
-private const val TAG = "AudioDecoderBase"
+private const val TAG = "AudioDecoderApi21"
 
-/**
- * An implementation
- */
-internal open class AudioDecoderBase : AudioDecoder {
+@RequiresApi(Build.VERSION_CODES.LOLLIPOP)
+internal class AudioDecoderApi21 : AudioDecoderBase() {
 
-    internal var mExtractor: MediaExtractor? = null
-    internal var mDecoder: MediaCodec? = null
-    internal var mListener: AudioDecoder.Listener = AudioDecoder.DefaultListener
-
-    override fun configure(context: Context, contentUri: Uri, listener: AudioDecoder.Listener) {
-        val extractor = MediaExtractor().apply {
-            setDataSource(context, contentUri, null)
-        }
-
-        if (extractor.trackCount == 0) {
-            throw IOException("No track available through this URI.")
-        }
-
-        val inputFormat = extractor.getTrackFormat(0)
-        val sampleRate = inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-        val mimeType = inputFormat.getString(MediaFormat.KEY_MIME)
-        Log.d(TAG, "Input format: " + inputFormat.toString())
-
-        val decoder = MediaCodec.createDecoderByType(mimeType)
-        decoder.configure(inputFormat, null, null, 0)
-
-        val outputFormat = decoder.outputFormat
-        Log.d(TAG, "Output format: " + outputFormat.toString())
-
-        mExtractor = extractor
-        mDecoder = decoder
-    }
-
-    @Suppress("DEPRECATION")
     override fun start() {
         val extractor = checkNotNull(mExtractor) { "DataSource is not set" }
         val decoder = checkNotNull(mDecoder) { "DataSource is not set" }
 
         decoder.start()
-        val inputs = decoder.inputBuffers
-        var outputs = decoder.outputBuffers
         val info = MediaCodec.BufferInfo()
 
         extractor.selectTrack(0)
@@ -70,8 +31,9 @@ internal open class AudioDecoderBase : AudioDecoder {
             val inputIndex = decoder.dequeueInputBuffer(timeoutUs)
             if (inputIndex >= 0) {
                 // An input buffer is available (unavailable = -1)
-                var sampleSize = extractor.readSampleData(inputs[inputIndex], 0)
-                Log.d(TAG, "Bytes read from source : $sampleSize")
+                val inputBuffer = decoder.getInputBuffer(inputIndex)
+                var sampleSize = extractor.readSampleData(inputBuffer, 0)
+                Log.d(TAG, "Bytes read from source : " + sampleSize)
                 var presentationTimeUs: Long = 0
 
                 if (sampleSize < 0) {
@@ -98,8 +60,8 @@ internal open class AudioDecoderBase : AudioDecoder {
                 // Get decoded samples
                 val outputIndex = decoder.dequeueOutputBuffer(info, timeoutUs)
                 if (outputIndex >= 0) {
-                    val buffer = outputs[outputIndex]
-                    val samples = buffer.order(ByteOrder.nativeOrder()).asShortBuffer()
+                    val outputBuffer = decoder.getOutputBuffer(outputIndex)
+                    val samples = outputBuffer.order(ByteOrder.nativeOrder()).asShortBuffer()
 
                     // Make those samples available to the client
                     mListener.onFramesAvailable(samples)
@@ -113,9 +75,6 @@ internal open class AudioDecoderBase : AudioDecoder {
                         sawEndOfOutput = true
                     }
 
-                } else if (outputIndex == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
-                    Log.d(TAG, "Output buffers have changed")
-                    outputs = decoder.outputBuffers
                 } else if (outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                     val outputFormat = decoder.outputFormat
                     Log.d(TAG, "New output format: $outputFormat")
@@ -128,13 +87,6 @@ internal open class AudioDecoderBase : AudioDecoder {
         }
 
         // Notify clients that the decoding for this track is finished
-        decoder.stop()
         mListener.onFinished()
     }
-
-    override fun reset() {
-        mExtractor?.release()
-        mDecoder?.release()
-    }
-
 }
