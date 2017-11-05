@@ -1,21 +1,19 @@
 package fr.ts.audiodecoder
 
 import android.content.Context
-import android.media.AudioFormat
-import android.media.AudioTrack
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri
 import android.util.Log
-
 import java.io.IOException
 import java.nio.ByteOrder
 
 private const val TAG = "AudioDecoderBase"
 
 /**
- * An implementation
+ * Base implementation of AudioDecoder that should be used on versions earlier than API 21.
+ * This uses the synchronous API of MediaCodec with array of buffers.
  */
 internal open class AudioDecoderBase : AudioDecoder {
 
@@ -33,18 +31,15 @@ internal open class AudioDecoderBase : AudioDecoder {
         }
 
         val inputFormat = extractor.getTrackFormat(0)
-        val sampleRate = inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
         val mimeType = inputFormat.getString(MediaFormat.KEY_MIME)
         Log.d(TAG, "Input format: " + inputFormat.toString())
 
         val decoder = MediaCodec.createDecoderByType(mimeType)
         decoder.configure(inputFormat, null, null, 0)
 
-        val outputFormat = decoder.outputFormat
-        Log.d(TAG, "Output format: " + outputFormat.toString())
-
         mExtractor = extractor
         mDecoder = decoder
+        mListener = listener
     }
 
     @Suppress("DEPRECATION")
@@ -70,6 +65,7 @@ internal open class AudioDecoderBase : AudioDecoder {
             val inputIndex = decoder.dequeueInputBuffer(timeoutUs)
             if (inputIndex >= 0) {
                 // An input buffer is available (unavailable = -1)
+                inputs[inputIndex].clear()
                 var sampleSize = extractor.readSampleData(inputs[inputIndex], 0)
                 Log.d(TAG, "Bytes read from source : $sampleSize")
                 var presentationTimeUs: Long = 0
@@ -83,7 +79,12 @@ internal open class AudioDecoderBase : AudioDecoder {
                     // The position of this sample in the track, in microseconds
                     // Since samples are available, this could never be -1
                     presentationTimeUs = extractor.sampleTime
-                    assert(presentationTimeUs != -1L)
+
+                    // Manually sets the limit and position to point to the data just read
+                    with(inputs[inputIndex]) {
+                        position(0)
+                        limit(sampleSize)
+                    }
                 }
 
                 // Send the filled buffer back to the decoder
@@ -98,7 +99,11 @@ internal open class AudioDecoderBase : AudioDecoder {
                 // Get decoded samples
                 val outputIndex = decoder.dequeueOutputBuffer(info, timeoutUs)
                 if (outputIndex >= 0) {
-                    val buffer = outputs[outputIndex]
+                    val buffer = outputs[outputIndex].apply {
+                        position(0)
+                        limit(info.size)
+                    }
+
                     val samples = buffer.order(ByteOrder.nativeOrder()).asShortBuffer()
 
                     // Make those samples available to the client
@@ -133,8 +138,12 @@ internal open class AudioDecoderBase : AudioDecoder {
     }
 
     override fun reset() {
-        mExtractor?.release()
+        mDecoder?.let {
+            it.stop()
+            it.release()
+        }
         mDecoder?.release()
+        mExtractor?.release()
     }
 
 }

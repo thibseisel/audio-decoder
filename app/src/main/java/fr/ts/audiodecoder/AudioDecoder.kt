@@ -1,13 +1,11 @@
 package fr.ts.audiodecoder
 
 import android.content.Context
-import android.net.Uri
-
-import java.io.IOException
-import java.nio.ShortBuffer
-
 import android.media.AudioFormat.ENCODING_PCM_16BIT
 import android.media.MediaFormat
+import android.net.Uri
+import java.io.IOException
+import java.nio.ShortBuffer
 
 /**
  * Read audio samples at a specific [Uri] as 16-bit PCM audio frames.
@@ -17,6 +15,10 @@ interface AudioDecoder {
     /**
      * Configures this decoder to read from the specified [contentUri].
      * This should be called before starting the decoder.
+     *
+     * @param context will be used to resolve the media content uri
+     * @param contentUri the uri pointing to the media to decode
+     * @param listener an object to react to various decoder events
      *
      * @throws IOException if no track can be found at the specified uri
      */
@@ -56,12 +58,15 @@ interface AudioDecoder {
         fun onFramesAvailable(frames: ShortBuffer)
 
         /**
+         * Called when the output audio format has changed.
+         * Subsequent calls to [onFramesAvailable] will emit frames of the provided `outputFormat`.
          *
+         * @param outputFormat The new output format
          */
         fun onOutputFormatChanged(outputFormat: MediaFormat)
 
         /**
-         *
+         * Called when a decoding error occurred.
          */
         fun onError()
 

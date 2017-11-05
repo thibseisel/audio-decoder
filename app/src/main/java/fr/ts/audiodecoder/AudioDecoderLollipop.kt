@@ -6,10 +6,14 @@ import android.support.annotation.RequiresApi
 import android.util.Log
 import java.nio.ByteOrder
 
-private const val TAG = "AudioDecoderApi21"
+private const val TAG = "AudioDecoderLollipop"
 
+/**
+ * AudioDecoder implementation to be used on API 21 and above.
+ * This uses the synchronous API of MediaCodec.
+ */
 @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
-internal class AudioDecoderApi21 : AudioDecoderBase() {
+internal class AudioDecoderLollipop : AudioDecoderBase() {
 
     override fun start() {
         val extractor = checkNotNull(mExtractor) { "DataSource is not set" }
@@ -59,6 +63,7 @@ internal class AudioDecoderApi21 : AudioDecoderBase() {
 
                 // Get decoded samples
                 val outputIndex = decoder.dequeueOutputBuffer(info, timeoutUs)
+
                 if (outputIndex >= 0) {
                     val outputBuffer = decoder.getOutputBuffer(outputIndex)
                     val samples = outputBuffer.order(ByteOrder.nativeOrder()).asShortBuffer()
@@ -79,6 +84,8 @@ internal class AudioDecoderApi21 : AudioDecoderBase() {
                     val outputFormat = decoder.outputFormat
                     Log.d(TAG, "New output format: $outputFormat")
                     mListener.onOutputFormatChanged(outputFormat)
+                } else if (outputIndex == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
+                    // Ignored deprecated code
                 } else {
                     Log.w(TAG, "Unexpected error code: $outputIndex")
                     mListener.onError()

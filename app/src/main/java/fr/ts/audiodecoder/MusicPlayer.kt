@@ -26,7 +26,8 @@ class MusicPlayer {
 
     fun stop() {
         val player = checkNotNull(audioTrack) { "MusicPlayer should be configured" }
-        player.stop()
+        player.pause()
+        player.flush()
     }
 
     fun feed(samples: ShortBuffer) {
@@ -41,5 +42,6 @@ class MusicPlayer {
 
     fun release() {
         audioTrack?.release()
+        audioTrack = null
     }
 }
